@@ -96,21 +96,60 @@ describe('CubeSandboxClient', () => {
     expect(client).toBeDefined();
   });
 
-  describe('execute', () => {
-    it('POSTs to /api/execute with templateId, code, and bearer auth', async () => {
+  describe('createSandbox', () => {
+    it('POSTs to /api/sandboxes with templateId and returns sandbox ID', async () => {
       fetchMock.mockResolvedValueOnce(
         jsonResponse({
-          requestId: 'req-1',
-          status: 'success',
-          result: { stdout: 'hello\n' },
+          id: 'sbx-1',
+          status: 'running',
+          createdAt: '2026-05-28T00:00:00Z',
+          expiresAt: '2026-05-28T01:00:00Z',
         })
       );
 
-      const res = await client.execute({ code: 'print("hi")', language: 'python' });
+      const sandboxId = await client.createSandbox();
 
       expect(fetchMock).toHaveBeenCalledTimes(1);
       const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
-      expect(url).toBe('https://api.cubesandbox.example.com/api/execute');
+      expect(url).toBe('https://api.cubesandbox.example.com/api/sandboxes');
+      expect(init.method).toBe('POST');
+      expect((init.headers as Record<string, string>)['Authorization']).toBe(
+        'Bearer test-api-key'
+      );
+      expect(JSON.parse(init.body as string)).toEqual({
+        templateId: 'test-template-id',
+      });
+      expect(sandboxId).toBe('sbx-1');
+    });
+  });
+
+  describe('execute', () => {
+    it('POSTs to /api/sandboxes/{sandboxId}/execute with code and bearer auth', async () => {
+      fetchMock.mockResolvedValueOnce(
+        jsonResponse({
+          id: 'sbx-1',
+          status: 'running',
+          createdAt: '2026-05-28T00:00:00Z',
+          expiresAt: '2026-05-28T01:00:00Z',
+        })
+      );
+      fetchMock.mockResolvedValueOnce(
+        jsonResponse({
+          output: 'hello\n',
+          stderr: '',
+          exit_code: 0,
+          execution_time_ms: 100,
+        })
+      );
+
+      await client.createSandbox();
+      const res = await client.execute({ code: 'print("hi")', language: 'python' });
+
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      const [url, init] = fetchMock.mock.calls[1] as [string, RequestInit];
+      expect(url).toBe(
+        'https://api.cubesandbox.example.com/api/sandboxes/sbx-1/execute'
+      );
       expect(init.method).toBe('POST');
       expect((init.headers as Record<string, string>)['Authorization']).toBe(
         'Bearer test-api-key'
@@ -119,22 +158,37 @@ describe('CubeSandboxClient', () => {
         'application/json'
       );
       expect(JSON.parse(init.body as string)).toEqual({
-        templateId: 'test-template-id',
         code: 'print("hi")',
         language: 'python',
       });
       expect(res).toEqual({
-        requestId: 'req-1',
-        status: 'success',
-        result: { stdout: 'hello\n' },
+        output: 'hello\n',
+        stderr: '',
+        exit_code: 0,
+        execution_time_ms: 100,
       });
+    });
+
+    it('throws if sandbox not created', async () => {
+      await expect(
+        client.execute({ code: 'print("hi")', language: 'python' })
+      ).rejects.toThrow('Sandbox not created. Call createSandbox() first.');
     });
 
     it('surfaces a structured error on non-2xx responses', async () => {
       fetchMock.mockResolvedValueOnce(
+        jsonResponse({
+          id: 'sbx-1',
+          status: 'running',
+          createdAt: '2026-05-28T00:00:00Z',
+          expiresAt: '2026-05-28T01:00:00Z',
+        })
+      );
+      fetchMock.mockResolvedValueOnce(
         errorResponse(500, 'Internal Server Error', 'sandbox boot failed')
       );
 
+      await client.createSandbox();
       await expect(
         client.execute({ code: 'boom', language: 'python' })
       ).rejects.toThrow(
@@ -143,8 +197,17 @@ describe('CubeSandboxClient', () => {
     });
 
     it('propagates network errors from fetch', async () => {
+      fetchMock.mockResolvedValueOnce(
+        jsonResponse({
+          id: 'sbx-1',
+          status: 'running',
+          createdAt: '2026-05-28T00:00:00Z',
+          expiresAt: '2026-05-28T01:00:00Z',
+        })
+      );
       fetchMock.mockRejectedValueOnce(new Error('ECONNREFUSED'));
 
+      await client.createSandbox();
       await expect(
         client.execute({ code: 'x', language: 'python' })
       ).rejects.toThrow('ECONNREFUSED');
@@ -152,29 +215,61 @@ describe('CubeSandboxClient', () => {
   });
 
   describe('getSandboxInfo', () => {
-    it('GETs the template-scoped sandbox endpoint', async () => {
-      const info = {
+    it('GETs the sandbox endpoint with sandboxId', async () => {
+      fetchMock.mockResolvedValueOnce(
+        jsonResponse({
+          id: 'sbx-1',
+          status: 'running',
+          createdAt: '2026-05-28T00:00:00Z',
+          expiresAt: '2026-05-28T01:00:00Z',
+        })
+      );
+      fetchMock.mockResolvedValueOnce(
+        jsonResponse({
+          id: 'sbx-1',
+          status: 'running',
+          createdAt: '2026-05-28T00:00:00Z',
+          expiresAt: '2026-05-28T01:00:00Z',
+        })
+      );
+
+      await client.createSandbox();
+      const result = await client.getSandboxInfo();
+
+      const [url, init] = fetchMock.mock.calls[1] as [string, RequestInit];
+      expect(url).toBe(
+        'https://api.cubesandbox.example.com/api/sandboxes/sbx-1'
+      );
+      expect(init.method).toBe('GET');
+      expect(init.body).toBeUndefined();
+      expect(result).toEqual({
         id: 'sbx-1',
         status: 'running',
         createdAt: '2026-05-28T00:00:00Z',
         expiresAt: '2026-05-28T01:00:00Z',
-      };
-      fetchMock.mockResolvedValueOnce(jsonResponse(info));
+      });
+    });
 
-      const result = await client.getSandboxInfo();
-
-      const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
-      expect(url).toBe(
-        'https://api.cubesandbox.example.com/api/sandboxes/test-template-id'
+    it('throws if sandbox not created', async () => {
+      await expect(client.getSandboxInfo()).rejects.toThrow(
+        'Sandbox not created. Call createSandbox() first.'
       );
-      expect(init.method).toBe('GET');
-      expect(init.body).toBeUndefined();
-      expect(result).toEqual(info);
     });
 
     it('wraps non-2xx responses with context', async () => {
-      fetchMock.mockResolvedValueOnce(errorResponse(404, 'Not Found', 'no sandbox'));
+      fetchMock.mockResolvedValueOnce(
+        jsonResponse({
+          id: 'sbx-1',
+          status: 'running',
+          createdAt: '2026-05-28T00:00:00Z',
+          expiresAt: '2026-05-28T01:00:00Z',
+        })
+      );
+      fetchMock.mockResolvedValueOnce(
+        errorResponse(404, 'Not Found', 'no sandbox')
+      );
 
+      await client.createSandbox();
       await expect(client.getSandboxInfo()).rejects.toThrow(
         'CubeSandbox API error: 404 Not Found - no sandbox'
       );
@@ -199,16 +294,31 @@ describe('CubeSandboxClient', () => {
   });
 
   describe('terminateSandbox', () => {
-    it('DELETEs the template-scoped sandbox endpoint', async () => {
+    it('DELETEs the sandbox endpoint with sandboxId', async () => {
+      fetchMock.mockResolvedValueOnce(
+        jsonResponse({
+          id: 'sbx-1',
+          status: 'running',
+          createdAt: '2026-05-28T00:00:00Z',
+          expiresAt: '2026-05-28T01:00:00Z',
+        })
+      );
       fetchMock.mockResolvedValueOnce(jsonResponse({}));
 
+      await client.createSandbox();
       await client.terminateSandbox();
 
-      const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+      const [url, init] = fetchMock.mock.calls[1] as [string, RequestInit];
       expect(url).toBe(
-        'https://api.cubesandbox.example.com/api/sandboxes/test-template-id'
+        'https://api.cubesandbox.example.com/api/sandboxes/sbx-1'
       );
       expect(init.method).toBe('DELETE');
+    });
+
+    it('throws if sandbox not created', async () => {
+      await expect(client.terminateSandbox()).rejects.toThrow(
+        'Sandbox not created. Call createSandbox() first.'
+      );
     });
   });
 });
@@ -234,12 +344,21 @@ describe('worker handlers', () => {
     process.env = originalEnv;
   });
 
-  it('execute() returns status/result/error from the API', async () => {
+  it('execute() returns status/output/stderr/exit_code from the API', async () => {
     fetchMock.mockResolvedValueOnce(
       jsonResponse({
-        requestId: 'r-1',
-        status: 'success',
-        result: { stdout: 'ok\n' },
+        id: 'sbx-1',
+        status: 'running',
+        createdAt: '2026-05-28T00:00:00Z',
+        expiresAt: '2026-05-28T01:00:00Z',
+      })
+    );
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({
+        output: 'ok\n',
+        stderr: '',
+        exit_code: 0,
+        execution_time_ms: 100,
       })
     );
 
@@ -248,20 +367,34 @@ describe('worker handlers', () => {
 
     expect(res).toEqual({
       status: 'success',
-      result: { stdout: 'ok\n' },
-      error: undefined,
+      output: 'ok\n',
+      stderr: '',
+      exit_code: 0,
     });
   });
 
   it('execute() defaults language to python when omitted', async () => {
     fetchMock.mockResolvedValueOnce(
-      jsonResponse({ requestId: 'r-2', status: 'success' })
+      jsonResponse({
+        id: 'sbx-1',
+        status: 'running',
+        createdAt: '2026-05-28T00:00:00Z',
+        expiresAt: '2026-05-28T01:00:00Z',
+      })
+    );
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({
+        output: '',
+        stderr: '',
+        exit_code: 0,
+        execution_time_ms: 100,
+      })
     );
 
     const { workerApi } = await import('../src/worker');
     await workerApi.execute('print(1)');
 
-    const body = JSON.parse(fetchMock.mock.calls[0][1].body as string);
+    const body = JSON.parse(fetchMock.mock.calls[1][1].body as string);
     expect(body.language).toBe('python');
   });
 
@@ -284,6 +417,14 @@ describe('worker handlers', () => {
         expiresAt: '2026-05-28T01:00:00Z',
       })
     );
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({
+        id: 'sbx-1',
+        status: 'running',
+        createdAt: '2026-05-28T00:00:00Z',
+        expiresAt: '2026-05-28T01:00:00Z',
+      })
+    );
 
     const { workerApi } = await import('../src/worker');
     const info = await workerApi.getSandboxInfo();
@@ -297,6 +438,14 @@ describe('worker handlers', () => {
   });
 
   it('getSandboxInfo() wraps client errors with descriptive context', async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({
+        id: 'sbx-1',
+        status: 'running',
+        createdAt: '2026-05-28T00:00:00Z',
+        expiresAt: '2026-05-28T01:00:00Z',
+      })
+    );
     fetchMock.mockResolvedValueOnce(errorResponse(404, 'Not Found', 'gone'));
 
     const { workerApi } = await import('../src/worker');

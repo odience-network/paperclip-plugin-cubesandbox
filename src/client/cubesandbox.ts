@@ -1,10 +1,17 @@
 import type { CubeSandboxConfig } from './config';
 
+export interface CreateSandboxResponse {
+  id: string;
+  status: string;
+  createdAt: string;
+  expiresAt: string;
+}
+
 export interface ExecuteResponse {
-  requestId: string;
-  status: 'success' | 'error';
-  result?: unknown;
-  error?: string;
+  output?: string;
+  stderr?: string;
+  exit_code: number;
+  execution_time_ms: number;
 }
 
 export interface SandboxInfo {
@@ -22,6 +29,7 @@ export interface ExecuteOptions {
 
 export class CubeSandboxClient {
   private config: CubeSandboxConfig;
+  private sandboxId: string | null = null;
 
   constructor(config: CubeSandboxConfig) {
     this.config = config;
@@ -54,17 +62,42 @@ export class CubeSandboxClient {
     return response.json() as Promise<T>;
   }
 
+  async createSandbox(): Promise<string> {
+    const response = await this.request<CreateSandboxResponse>(
+      'POST',
+      '/api/sandboxes',
+      { templateId: this.config.templateId }
+    );
+    this.sandboxId = response.id;
+    return response.id;
+  }
+
+  getSandboxId(): string | null {
+    return this.sandboxId;
+  }
+
+  setSandboxId(id: string): void {
+    this.sandboxId = id;
+  }
+
   async execute(options: ExecuteOptions): Promise<ExecuteResponse> {
-    return this.request<ExecuteResponse>('POST', '/api/execute', {
-      templateId: this.config.templateId,
-      ...options,
-    });
+    if (!this.sandboxId) {
+      throw new Error('Sandbox not created. Call createSandbox() first.');
+    }
+    return this.request<ExecuteResponse>(
+      'POST',
+      `/api/sandboxes/${this.sandboxId}/execute`,
+      options
+    );
   }
 
   async getSandboxInfo(): Promise<SandboxInfo> {
+    if (!this.sandboxId) {
+      throw new Error('Sandbox not created. Call createSandbox() first.');
+    }
     return this.request<SandboxInfo>(
       'GET',
-      `/api/sandboxes/${this.config.templateId}`
+      `/api/sandboxes/${this.sandboxId}`
     );
   }
 
@@ -77,10 +110,14 @@ export class CubeSandboxClient {
   }
 
   async terminateSandbox(): Promise<void> {
+    if (!this.sandboxId) {
+      throw new Error('Sandbox not created. Call createSandbox() first.');
+    }
     await this.request<void>(
       'DELETE',
-      `/api/sandboxes/${this.config.templateId}`
+      `/api/sandboxes/${this.sandboxId}`
     );
+    this.sandboxId = null;
   }
 }
 
