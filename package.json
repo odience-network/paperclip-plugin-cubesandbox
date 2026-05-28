@@ -1,0 +1,31 @@
+{
+  "name": "@odience/cubesandbox",
+  "version": "1.0.0",
+  "description": "CubeSandbox integration plugin for Paperclip",
+  "author": "Odience",
+  "license": "MIT",
+  "type": "module",
+  "paperclipPlugin": {
+    "manifest": "dist/manifest.js",
+    "worker": "dist/worker.js",
+    "ui": "dist/ui/index.js"
+  },
+  "scripts": {
+    "dev": "node esbuild.config.cjs --watch",
+    "build": "node esbuild.config.cjs",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest",
+    "dev:ui": "vite dev"
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.41",
+    "@types/react": "^18.3.29",
+    "@types/react-dom": "^18.3.7",
+    "esbuild": "^0.19.12",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "typescript": "^5.9.3",
+    "vite": "^5.0.0",
+    "vitest": "^0.34.0"
+  }
+}
