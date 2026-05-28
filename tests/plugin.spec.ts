@@ -485,7 +485,7 @@ describe('plugin manifest', () => {
   it('declares worker + ui capabilities and required config schema', async () => {
     const { default: manifest } = await import('../src/manifest');
 
-    expect(manifest.key).toBe('@odience/cubesandbox');
+    expect(manifest.key).toBe('@odience/paperclip-plugin-cubesandbox');
     expect(manifest.capabilities.worker?.enabled).toBe(true);
     expect(manifest.capabilities.ui?.enabled).toBe(true);
     const schema = manifest.config?.schema as {

@@ -1,7 +1,7 @@
 import type { PluginManifest } from '@paperclipai/plugin-sdk';
 
 const manifest: PluginManifest = {
-  key: '@odience/cubesandbox',
+  key: '@odience/paperclip-plugin-cubesandbox',
   name: 'CubeSandbox',
   description: 'Execute code in isolated CubeSandbox environments',
   version: '1.0.0',

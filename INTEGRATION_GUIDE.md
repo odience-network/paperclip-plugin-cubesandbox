@@ -40,7 +40,7 @@ In your agent configuration (agent.yaml or similar), ensure the CubeSandbox plug
 
 ```yaml
 plugins:
-  - '@odience/cubesandbox'
+  - '@odience/paperclip-plugin-cubesandbox'
 ```
 
 ## Basic Integration
@@ -500,7 +500,7 @@ await worker.execute('result3 = compute_c(); print(result3)', 'python');
 
 ### Plugin Not Found
 
-**Error:** "Plugin not found: @odience/cubesandbox"
+**Error:** "Plugin not found: @odience/paperclip-plugin-cubesandbox"
 
 **Solution:**
 1. Ensure the plugin is built: `pnpm build`

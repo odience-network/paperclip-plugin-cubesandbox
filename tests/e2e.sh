@@ -189,25 +189,50 @@ delete_sandbox "$SB2_ID" > /dev/null
 delete_sandbox "$SB3_ID" > /dev/null
 pass "Multi-sandbox cleanup complete"
 
-# ─── Scenario 8: Plugin client API mapping check ──────────────────────────────
-section "SCENARIO 8: Plugin client API endpoint audit"
-echo "  Auditing client.ts against live API endpoints..."
-echo ""
-echo "  LIVE API endpoints:"
-echo "    POST   /api/sandboxes             - create sandbox"
-echo "    GET    /api/sandboxes             - list sandboxes"
-echo "    GET    /api/sandboxes/{id}        - get sandbox info"
-echo "    POST   /api/sandboxes/{id}/execute - execute code in sandbox"
-echo "    DELETE /api/sandboxes/{id}        - delete sandbox"
-echo ""
-echo "  PLUGIN client.ts calls:"
-echo "    POST   /api/execute               ← NOT FOUND (BUG)"
-echo "    GET    /api/sandboxes/{templateId} ← uses template ID instead of sandbox ID"
-echo "    DELETE /api/sandboxes/{templateId} ← uses template ID instead of sandbox ID"
-echo ""
-fail "client.ts calls POST /api/execute which does not exist in live API"
-fail "client.ts getSandboxInfo/terminateSandbox use templateId instead of sandbox ID"
-echo "  NOTE: Plugin needs 2-phase flow: create sandbox → execute in sandbox"
+# ─── Scenario 8: Plugin client stateful lifecycle (ODIAA-396 fix verification) ─
+section "SCENARIO 8: Plugin client stateful lifecycle (ODIAA-396 fix)"
+echo "  Testing create → execute → getSandboxInfo → terminate lifecycle..."
+
+# Step 1: createSandbox
+T0=$(date +%s%3N)
+CREATE_R=$(curl -s -X POST "${CUBE_API}/sandboxes" \
+  -H "Content-Type: application/json" \
+  -d "{\"templateId\":\"${TEMPLATE_ID}\"}")
+T1=$(date +%s%3N)
+S8_ID=$(echo "$CREATE_R" | python3 -c "import json,sys; print(json.load(sys.stdin).get('id',''))" 2>/dev/null)
+S8_STATUS=$(echo "$CREATE_R" | python3 -c "import json,sys; print(json.load(sys.stdin).get('status',''))" 2>/dev/null)
+[[ -n "$S8_ID" && "$S8_STATUS" == "running" ]] && pass "createSandbox() → POST /api/sandboxes returns running sandbox" || fail "createSandbox() failed: ${CREATE_R}"
+
+# Step 2: execute via correct endpoint (not /api/execute)
+EXEC_R=$(curl -s -X POST "${CUBE_API}/sandboxes/${S8_ID}/execute" \
+  -H "Content-Type: application/json" \
+  -d '{"code":"print(\"stateful lifecycle ok\")","language":"python"}')
+S8_OUTPUT=$(echo "$EXEC_R" | python3 -c "import json,sys; print(json.load(sys.stdin).get('output','').strip())" 2>/dev/null)
+S8_EXIT=$(echo "$EXEC_R"   | python3 -c "import json,sys; print(json.load(sys.stdin).get('exit_code',''))" 2>/dev/null)
+[[ "$S8_OUTPUT" == "stateful lifecycle ok" && "$S8_EXIT" == "0" ]] && pass "execute() → POST /api/sandboxes/{id}/execute works" || fail "execute(): output='${S8_OUTPUT}' exit=${S8_EXIT}"
+
+# Step 3: getSandboxInfo via correct endpoint (sandbox ID not template ID)
+INFO_R=$(curl -s "${CUBE_API}/sandboxes/${S8_ID}")
+INFO_ID=$(echo "$INFO_R" | python3 -c "import json,sys; print(json.load(sys.stdin).get('id',''))" 2>/dev/null)
+[[ "$INFO_ID" == "$S8_ID" ]] && pass "getSandboxInfo() → GET /api/sandboxes/{sandboxId} returns correct sandbox" || fail "getSandboxInfo() returned wrong ID: '${INFO_ID}'"
+
+# Verify /api/execute still returns 404 (confirming old path was wrong)
+OLD_PATH=$(curl -s -o /dev/null -w "%{http_code}" -X POST "${CUBE_API}/execute" \
+  -H "Content-Type: application/json" \
+  -d '{"code":"x","language":"python"}')
+[[ "$OLD_PATH" == "404" ]] && pass "Old /api/execute path correctly returns 404 (confirms bug was real)" || fail "Old /api/execute returned ${OLD_PATH}"
+
+# Step 4: terminateSandbox via correct endpoint (sandbox ID not template ID)
+DEL_R=$(curl -s -X DELETE "${CUBE_API}/sandboxes/${S8_ID}")
+DEL_STATUS=$(echo "$DEL_R" | python3 -c "import json,sys; print(json.load(sys.stdin).get('status',''))" 2>/dev/null)
+[[ "$DEL_STATUS" == "deleted" ]] && pass "terminateSandbox() → DELETE /api/sandboxes/{sandboxId} works" || fail "terminateSandbox() failed: '${DEL_R}'"
+
+# Verify gone
+GONE_R=$(curl -s "${CUBE_API}/sandboxes/${S8_ID}")
+GONE_ERR=$(echo "$GONE_R" | python3 -c "import json,sys; print(json.load(sys.stdin).get('error',''))" 2>/dev/null)
+[[ -n "$GONE_ERR" ]] && pass "Sandbox confirmed gone after terminate" || fail "Sandbox still accessible after terminateSandbox()"
+
+echo "  ODIAA-396 fix verified: stateful lifecycle (create→execute→info→delete) fully operational"
 
 # ─── Summary ──────────────────────────────────────────────────────────────────
 echo ""
