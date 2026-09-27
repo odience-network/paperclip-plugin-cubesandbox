@@ -1,31 +1,67 @@
 {
   "name": "@odience/paperclip-plugin-cubesandbox",
-  "version": "1.0.0",
-  "description": "CubeSandbox integration plugin for Paperclip",
-  "author": "Odience",
+  "version": "2.0.0",
+  "description": "Paperclip sandbox-provider environment driver for self-hosted Tencent CubeSandbox",
   "license": "MIT",
-  "type": "module",
-  "paperclipPlugin": {
-    "manifest": "dist/manifest.js",
-    "worker": "dist/worker.js",
-    "ui": "dist/ui/index.js"
+  "author": "Odience",
+  "homepage": "https://github.com/odience-network/paperclip-plugin-cubesandbox",
+  "bugs": {
+    "url": "https://github.com/odience-network/paperclip-plugin-cubesandbox/issues"
   },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/odience-network/paperclip-plugin-cubesandbox.git"
+  },
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "publishConfig": {
+    "access": "public",
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "import": "./dist/index.js"
+      }
+    },
+    "main": "./dist/index.js",
+    "types": "./dist/index.d.ts"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "paperclipPlugin": {
+    "manifest": "./dist/manifest.js",
+    "worker": "./dist/worker.js"
+  },
+  "keywords": [
+    "paperclip",
+    "plugin",
+    "sandbox",
+    "cubesandbox",
+    "environment-driver"
+  ],
   "scripts": {
-    "dev": "node esbuild.config.cjs --watch",
-    "build": "node esbuild.config.cjs",
+    "build": "rm -rf dist && tsc",
+    "clean": "rm -rf dist",
     "typecheck": "tsc --noEmit",
-    "test": "vitest",
-    "dev:ui": "vite dev"
+    "test": "vitest run --config vitest.config.ts"
+  },
+  "dependencies": {
+    "e2b": "^2.51.0"
+  },
+  "peerDependencies": {
+    "@paperclipai/plugin-sdk": "^2026.916.1"
   },
   "devDependencies": {
-    "@types/node": "^20.19.41",
-    "@types/react": "^18.3.29",
-    "@types/react-dom": "^18.3.7",
-    "esbuild": "^0.19.12",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1",
-    "typescript": "^5.9.3",
-    "vite": "^5.0.0",
-    "vitest": "^0.34.0"
+    "@paperclipai/plugin-sdk": "^2026.916.1",
+    "@types/node": "^24.0.0",
+    "typescript": "^5.7.3",
+    "vitest": "^4.1.8"
+  },
+  "engines": {
+    "node": ">=24.11.0"
   }
 }
